@@ -331,17 +331,18 @@ border-radius: var(–radius); transition: transform .3s; z-index: 300; pointer-
 ```
 /* Bottom nav */
 .mobile-nav {
-  display: flex; position: fixed; bottom: 0; left: 0; right: 0; height: 56px;
+  display: flex; flex-direction: row; position: fixed; bottom: 0; left: 0; right: 0; height: 56px;
   background: var(--surface); border-top: 1px solid var(--border); z-index: 200;
-  padding: 6px 12px; gap: 8px; align-items: center;
+  padding: 6px 12px; gap: 8px; align-items: center; box-sizing: border-box;
 }
 .mobile-nav-btn {
-  flex: 1; display: flex; flex-direction: row; align-items: center; justify-content: center;
-  gap: 6px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
-  font-family: var(--mono); font-size: 12px; cursor: pointer; transition: all .15s;
-  padding: 8px 12px; border-radius: var(--radius); height: 38px;
+  flex: 1 1 0; min-width: 0; display: inline-flex; flex-direction: row; align-items: center;
+  justify-content: center; gap: 6px; background: var(--surface2); border: 1px solid var(--border);
+  color: var(--muted); font-family: var(--mono); font-size: 12px; cursor: pointer;
+  transition: all .15s; padding: 0 12px; border-radius: var(--radius); height: 38px;
+  white-space: nowrap; box-sizing: border-box;
 }
-.mobile-nav-btn .nav-icon { font-size: 14px; line-height: 1; }
+.mobile-nav-btn .nav-icon { font-size: 14px; line-height: 1; flex-shrink: 0; }
 .mobile-nav-btn.active { color: var(--accent); border-color: var(--accent-dark); background: rgba(143,176,48,.08); }
 
 /* Sidebar header compact */
@@ -1217,14 +1218,8 @@ if (window.innerWidth <= 768) {
 <!-- ══════════ Mobile bottom nav ══════════ -->
 
 <nav class="mobile-nav" id="mobile-nav">
-  <button class="mobile-nav-btn" id="nav-tasks" onclick="mobileTab('tasks')">
-    <span class="nav-icon">☰</span>
-    <span>tasks</span>
-  </button>
-  <button class="mobile-nav-btn active" id="nav-calendar" onclick="mobileTab('calendar')">
-    <span class="nav-icon">▦</span>
-    <span>calendar</span>
-  </button>
+  <button class="mobile-nav-btn" id="nav-tasks" onclick="mobileTab('tasks')"><span class="nav-icon">☰</span><span>tasks</span></button>
+  <button class="mobile-nav-btn active" id="nav-calendar" onclick="mobileTab('calendar')"><span class="nav-icon">▦</span><span>calendar</span></button>
 </nav>
 
 </body>
