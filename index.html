@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>taskflow</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f0f0f; --surface: #1a1a1a; --surface2: #242424; --surface3: #2e2e2e;
+    --border: #333; --text: #e8e6df; --muted: #888;
+    --accent: #c8f060; --accent-dark: #8fb030;
+    --danger: #ff5f57; --warn: #ffbd2e; --test-color: #b39ddb;
+    --mono: 'DM Mono', monospace; --serif: 'Fraunces', serif; --radius: 8px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 13px; min-height: 100vh; }
+  h1 { font-family: var(--serif); font-weight: 300; font-size: 28px; letter-spacing: -0.5px; }
+  h2 { font-family: var(--serif); font-weight: 600; font-size: 16px; }
+
+  /* ── Overlays ── */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.85); z-index: 500;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .overlay.hidden { display: none; }
+  .hidden { display: none !important; }
+  .overlay-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 28px; max-width: 540px; width: 100%; max-height: 90vh; display: flex; flex-direction: column;
+  }
+  .overlay-card h2 { font-family: var(--serif); font-weight: 600; font-size: 20px; margin-bottom: 6px; }
+  .overlay-card p { color: var(--muted); font-size: 12px; line-height: 1.7; margin-bottom: 16px; }
+  .overlay-card p a { color: var(--accent); }
+  .overlay-textarea {
+    width: 100%; flex: 1; min-height: 140px; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--mono); font-size: 11px; padding: 12px;
+    border-radius: var(--radius); outline: none; resize: vertical; line-height: 1.6; transition: border-color .15s;
+  }
+  .overlay-textarea:focus { border-color: var(--accent-dark); }
+  .overlay-actions { display: flex; gap: 10px; margin-top: 14px; align-items: center; flex-wrap: wrap; }
+  .btn-primary {
+    background: var(--accent); color: #111; border: none; font-family: var(--mono);
+    font-size: 12px; font-weight: 500; padding: 9px 18px; border-radius: var(--radius);
+    cursor: pointer; transition: opacity .15s;
+  }
+  .btn-primary:hover { opacity: .85; }
+  .btn-secondary {
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    font-family: var(--mono); font-size: 12px; padding: 9px 14px; border-radius: var(--radius);
+    cursor: pointer; transition: all .15s;
+  }
+  .btn-secondary:hover { border-color: var(--muted); color: var(--text); }
+  .overlay-error { color: var(--danger); font-size: 11px; margin-top: 8px; }
+  .overlay-note { font-size: 10px; color: var(--muted); margin-top: 8px; }
+  .config-steps { background: var(--surface2); border-radius: var(--radius); padding: 14px; margin-bottom: 16px; }
+  .config-steps ol { padding-left: 18px; }
+  .config-steps li { font-size: 11px; color: var(--muted); margin-bottom: 6px; line-height: 1.6; }
+  .config-steps li b { color: var(--text); }
+  .config-steps code { background: var(--surface3); padding: 1px 5px; border-radius: 3px; font-size: 10px; }
+
+  /* ── Import preview ── */
+  .import-preview {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px; margin-top: 12px; max-height: 200px; overflow-y: auto; display: none;
+  }
+  .import-preview.visible { display: block; }
+  .import-preview::-webkit-scrollbar { width: 4px; }
+  .import-preview::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .preview-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 11px; }
+  .preview-row .preview-name { flex: 1; color: var(--text); }
+  .preview-badge { font-size: 9px; padding: 1px 6px; border-radius: 3px; white-space: nowrap; }
+  .preview-badge.test { background: rgba(179,157,219,.2); color: var(--test-color); border: 1px solid rgba(179,157,219,.3); }
+  .preview-badge.task { background: var(--surface3); color: var(--muted); }
+  .preview-count { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+
+  /* ── Sync status ── */
+  #sync-status {
+    font-size: 10px; padding: 3px 8px; border-radius: 3px;
+    display: inline-flex; align-items: center; gap: 5px; transition: all .3s;
+  }
+  #sync-status.synced { color: var(--accent); }
+  #sync-status.syncing { color: var(--warn); }
+  #sync-status.offline { color: var(--muted); }
+  #sync-status.error { color: var(--danger); }
+  .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .sync-dot.pulse { animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  /* ── Layout ── */
+  .app { display: grid; grid-template-columns: 320px 1fr; min-height: 100vh; }
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .main { display: flex; flex-direction: column; overflow: hidden; }
+
+  .sidebar-header { padding: 20px 20px 12px; border-bottom: 1px solid var(--border); }
+  .sidebar-header-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .sidebar-header p { color: var(--muted); font-size: 11px; }
+  .sidebar-header-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .header-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    font-family: var(--mono); font-size: 10px; padding: 4px 8px;
+    border-radius: var(--radius); cursor: pointer; transition: all .15s;
+  }
+  .header-btn:hover { border-color: var(--accent-dark); color: var(--accent); }
+  .header-btn.import-btn { border-color: rgba(179,157,219,.4); color: var(--test-color); }
+  .header-btn.import-btn:hover { border-color: var(--test-color); background: rgba(179,157,219,.08); }
+
+  .add-task-area { padding: 14px 20px; border-bottom: 1px solid var(--border); }
+  .task-input-row { display: flex; gap: 8px; }
+  .task-input {
+    flex: 1; background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--mono); font-size: 12px; padding: 8px 10px; border-radius: var(--radius);
+    outline: none; transition: border-color .15s;
+  }
+  .task-input:focus { border-color: var(--accent-dark); }
+  .task-input::placeholder { color: var(--muted); }
+  .add-btn {
+    background: var(--accent); color: #111; border: none; font-family: var(--mono);
+    font-size: 12px; font-weight: 500; padding: 8px 14px; border-radius: var(--radius);
+    cursor: pointer; transition: opacity .15s; white-space: nowrap;
+  }
+  .add-btn:hover { opacity: .85; }
+  .deadline-row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+  .deadline-row label { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .date-input {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--mono); font-size: 11px; padding: 6px 8px; border-radius: var(--radius);
+    outline: none; flex: 1;
+  }
+  .date-input:focus { border-color: var(--accent-dark); }
+
+  .stats { display: flex; border-bottom: 1px solid var(--border); }
+  .stat { flex: 1; padding: 12px 14px; border-right: 1px solid var(--border); }
+  .stat:last-child { border-right: none; }
+  .stat-val { font-size: 20px; font-family: var(--serif); font-weight: 600; color: var(--accent); line-height: 1; }
+  .stat-lbl { font-size: 10px; color: var(--muted); margin-top: 3px; }
+
+  .task-list { flex: 1; overflow-y: auto; padding: 10px 0; }
+  .task-list::-webkit-scrollbar { width: 4px; }
+  .task-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .task-group-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; padding: 6px 20px 4px; }
+
+  .task-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 20px; cursor: pointer; transition: background .1s; }
+  .task-item:hover { background: var(--surface2); }
+  .task-item.done { opacity: .45; }
+  .task-check { width: 14px; height: 14px; border: 1px solid var(--border); border-radius: 3px; flex-shrink: 0; margin-top: 2px; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .task-item.done .task-check { background: var(--accent); border-color: var(--accent); }
+  .task-check-inner { width: 6px; height: 6px; background: #111; border-radius: 1px; opacity: 0; transition: opacity .15s; }
+  .task-item.done .task-check-inner { opacity: 1; }
+  .task-info { flex: 1; min-width: 0; }
+  .task-name { color: var(--text); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .task-item.done .task-name { text-decoration: line-through; color: var(--muted); }
+  .task-meta { display: flex; gap: 6px; margin-top: 3px; align-items: center; flex-wrap: wrap; }
+  .task-date { font-size: 10px; color: var(--muted); }
+  .task-date.overdue { color: var(--danger); }
+  .task-del { opacity: 0; font-size: 16px; line-height: 1; color: var(--muted); background: none; border: none; cursor: pointer; padding: 0 2px; transition: opacity .1s, color .1s; flex-shrink: 0; }
+  .task-item:hover .task-del { opacity: 1; }
+  .task-del:hover { color: var(--danger); }
+  .unscheduled-badge { font-size: 9px; background: var(--warn); color: #111; padding: 1px 5px; border-radius: 3px; }
+  .test-badge { font-size: 9px; background: rgba(179,157,219,.15); color: var(--test-color); border: 1px solid rgba(179,157,219,.25); padding: 1px 5px; border-radius: 3px; }
+  .assign-badge { font-size: 9px; background: rgba(255,183,77,.15); color: var(--assign-color); border: 1px solid rgba(255,183,77,.25); padding: 1px 5px; border-radius: 3px; }
+
+  .rebalance-area { padding: 12px 20px; border-top: 1px solid var(--border); }
+  .rebalance-btn {
+    width: 100%; background: transparent; border: 1px solid var(--accent-dark); color: var(--accent);
+    font-family: var(--mono); font-size: 12px; font-weight: 500; padding: 10px;
+    border-radius: var(--radius); cursor: pointer; transition: all .15s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .rebalance-btn:hover { background: var(--accent); color: #111; }
+  .rebalance-btn:disabled { opacity: .4; cursor: not-allowed; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spin { display: inline-block; animation: spin .8s linear infinite; }
+
+  /* ── Calendar ── */
+  .cal-header { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; }
+  .cal-nav { display: flex; align-items: center; gap: 8px; }
+  .cal-nav-btn {
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--mono); font-size: 12px; padding: 6px 10px; border-radius: var(--radius);
+    cursor: pointer; transition: all .15s;
+  }
+  .cal-nav-btn:hover { border-color: var(--accent-dark); color: var(--accent); }
+  .cal-month { font-family: var(--serif); font-size: 20px; font-weight: 300; }
+  .cal-today-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    font-family: var(--mono); font-size: 11px; padding: 5px 10px; border-radius: var(--radius);
+    cursor: pointer; margin-left: auto; transition: all .15s;
+  }
+  .cal-today-btn:hover { border-color: var(--accent-dark); color: var(--accent); }
+
+  .cal-grid { flex: 1; overflow-y: auto; padding: 16px 24px 24px; }
+  .cal-grid::-webkit-scrollbar { width: 4px; }
+  .cal-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 6px; }
+  .cal-weekday { text-align: center; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding: 4px 0; }
+  .cal-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .cal-day {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    min-height: 90px; padding: 6px; cursor: pointer; transition: all .15s; display: flex; flex-direction: column;
+  }
+  .cal-day:hover { border-color: #555; }
+  .cal-day.today { border-color: var(--accent-dark); }
+  .cal-day.blocked { background: repeating-linear-gradient(45deg, var(--surface), var(--surface) 4px, #1e1e1e 4px, #1e1e1e 8px); opacity: .6; }
+  .cal-day.other-month { opacity: .3; cursor: default; pointer-events: none; }
+  .cal-day.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .cal-day.test-day { border-color: rgba(179,157,219,.5); background: rgba(179,157,219,.04); }
+  .cal-day.assign-day { border-color: rgba(255,183,77,.4); background: rgba(255,183,77,.03); }
+  .cal-day-num { font-size: 11px; font-weight: 500; color: var(--muted); margin-bottom: 4px; display: flex; align-items: center; gap: 4px; }
+  .cal-day.today .cal-day-num { color: var(--accent); }
+  .cal-day.test-day .cal-day-num { color: var(--test-color); }
+  .cal-block-icon { font-size: 9px; color: var(--danger); }
+  .cal-test-icon { font-size: 9px; color: var(--test-color); }
+  .cal-assign-icon { font-size: 9px; color: var(--assign-color); }
+  .cal-day-tasks { flex: 1; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+  .cal-task-chip {
+    font-size: 10px; padding: 2px 5px; border-radius: 3px; background: var(--surface3);
+    color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    border-left: 2px solid var(--accent-dark);
+  }
+  .cal-task-chip.is-test { border-left-color: var(--test-color); color: var(--test-color); background: rgba(179,157,219,.08); }
+  .cal-task-chip.is-assign { border-left-color: var(--assign-color); color: var(--assign-color); background: rgba(255,183,77,.08); }
+  .cal-task-chip.done { opacity: .4; text-decoration: line-through; border-left-color: var(--muted); }
+  .cal-task-chip.overdue { border-left-color: var(--danger); color: var(--danger); }
+  .cal-more { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .load-bar { height: 3px; background: var(--surface3); border-radius: 2px; margin-top: 4px; overflow: hidden; }
+  .load-fill { height: 100%; border-radius: 2px; transition: width .3s; }
+
+  /* ── Day panel ── */
+  .day-panel {
+    position: fixed; right: 0; top: 0; bottom: 0; width: 280px;
+    background: var(--surface); border-left: 1px solid var(--border);
+    transform: translateX(100%); transition: transform .2s; z-index: 100; display: flex; flex-direction: column;
+  }
+  .day-panel.open { transform: translateX(0); }
+  .day-panel-header { padding: 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .day-panel-header h2 { flex: 1; }
+  .panel-close { background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; padding: 2px; line-height: 1; }
+  .panel-close:hover { color: var(--text); }
+  .day-panel-tasks { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+  .block-toggle { padding: 12px 16px; border-top: 1px solid var(--border); }
+  .block-btn {
+    width: 100%; background: transparent; border: 1px solid var(--border);
+    color: var(--muted); font-family: var(--mono); font-size: 11px;
+    padding: 8px; border-radius: var(--radius); cursor: pointer; transition: all .15s;
+  }
+  .block-btn:hover, .block-btn.active { border-color: var(--danger); color: var(--danger); background: rgba(255,95,87,.08); }
+  .panel-task-item {
+    display: flex; align-items: flex-start; gap: 10px; padding: 8px; border-radius: 6px;
+    background: var(--surface2); cursor: pointer; transition: background .1s;
+  }
+  .panel-task-item:hover { background: var(--surface3); }
+  .panel-task-item.done { opacity: .45; }
+
+  .empty-msg { color: var(--muted); font-size: 11px; text-align: center; padding: 24px; }
+  /* ── End date ── */
+  .end-date-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    font-family: var(--mono); font-size: 11px; padding: 5px 10px; border-radius: var(--radius);
+    cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: 6px;
+  }
+  .end-date-btn:hover { border-color: var(--warn); color: var(--warn); }
+  .end-date-btn.active { border-color: var(--warn); color: var(--warn); background: rgba(255,189,46,.08); }
+  .end-date-input {
+    background: var(--surface2); border: 1px solid var(--warn); color: var(--warn);
+    font-family: var(--mono); font-size: 11px; padding: 4px 8px; border-radius: var(--radius);
+    outline: none; display: none;
+  }
+  .end-date-input.visible { display: block; }
+  .cal-day.end-day { border-color: var(--warn) !important; }
+  .cal-day.end-day .cal-day-num { color: var(--warn); }
+  .end-day-icon { font-size: 9px; color: var(--warn); }
+  /* ── List view ── */
+  .view-toggle { display: flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-left: auto; }
+  .view-toggle-btn { background: transparent; border: none; color: var(--muted); font-family: var(--mono); font-size: 11px; padding: 5px 10px; cursor: pointer; transition: all .15s; }
+  .view-toggle-btn.active { background: var(--surface3); color: var(--text); }
+  .view-toggle-btn:hover:not(.active) { color: var(--text); }
+
+  .cal-list { flex: 1; overflow-y: auto; padding: 0; }
+  .cal-list::-webkit-scrollbar { width: 4px; }
+  .cal-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .cal-list-month { font-family: var(--serif); font-size: 13px; font-weight: 600; color: var(--muted); padding: 14px 24px 6px; text-transform: uppercase; letter-spacing: .06em; border-top: 1px solid var(--border); }
+  .cal-list-month:first-child { border-top: none; }
+  .cal-list-day { padding: 6px 24px; display: flex; align-items: flex-start; gap: 16px; border-bottom: 1px solid rgba(255,255,255,.04); transition: background .1s; cursor: pointer; }
+  .cal-list-day:hover { background: var(--surface2); }
+  .cal-list-day.today { background: rgba(143,176,48,.05); }
+  .cal-list-day.blocked { opacity: .35; cursor: default; }
+  .cal-list-day.end-day { border-left: 2px solid var(--warn); }
+  .cal-list-date { width: 52px; flex-shrink: 0; padding-top: 2px; }
+  .cal-list-dow { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .cal-list-day.today .cal-list-dow { color: var(--accent); }
+  .cal-list-dom { font-size: 20px; font-family: var(--serif); font-weight: 300; color: var(--text); line-height: 1.1; }
+  .cal-list-day.today .cal-list-dom { color: var(--accent); }
+  .cal-list-day.blocked .cal-list-dom { color: var(--muted); }
+  .cal-list-tasks { flex: 1; padding: 4px 0 8px; min-height: 28px; display: flex; flex-direction: column; gap: 3px; }
+  .cal-list-empty { font-size: 11px; color: rgba(136,136,136,.4); padding-top: 4px; }
+  .cal-list-chip { font-size: 11px; padding: 3px 8px; border-radius: 4px; background: var(--surface3); color: var(--text); border-left: 2px solid var(--accent-dark); display: flex; align-items: center; gap: 6px; }
+  .cal-list-chip.is-test { border-left-color: var(--test-color); color: var(--test-color); background: rgba(179,157,219,.08); }
+  .cal-list-chip.is-assign { border-left-color: var(--assign-color); color: var(--assign-color); background: rgba(255,183,77,.08); }
+  .cal-list-chip.done { opacity: .35; text-decoration: line-through; border-left-color: var(--muted); color: var(--muted); }
+  .cal-list-chip-name { flex: 1; }
+  .cal-list-icons { display: flex; gap: 4px; align-items: center; font-size: 9px; }
+  .cal-list-day-icons { display: flex; gap: 4px; align-items: flex-start; padding-top: 6px; flex-shrink: 0; }
+  .cal-list-day.blocked-day { background: repeating-linear-gradient(90deg, transparent, transparent 8px, rgba(255,95,87,.03) 8px, rgba(255,95,87,.03) 9px); }
+  .cal-list-day.blocked-day .cal-list-dom { color: var(--danger); opacity: .5; }
+  .cal-list-day.blocked-day .cal-list-dow { color: var(--danger); opacity: .5; }
+  .cal-list-block-btn { background: transparent; border: 1px solid transparent; color: var(--muted); font-family: var(--mono); font-size: 10px; padding: 3px 6px; border-radius: 4px; cursor: pointer; opacity: 0; transition: all .15s; white-space: nowrap; margin-top: 2px; }
+  .cal-list-day:hover .cal-list-block-btn { opacity: 1; }
+  .cal-list-day.blocked-day .cal-list-block-btn { opacity: .7; border-color: rgba(255,95,87,.3); color: var(--danger); }
+  .cal-list-day.blocked-day .cal-list-block-btn:hover { opacity: 1; background: rgba(255,95,87,.08); }
+  .cal-list-block-btn:hover { border-color: var(--border); color: var(--text); }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(70px);
+    background: var(--surface3); border: 1px solid var(--accent-dark); color: var(--accent);
+    font-family: var(--mono); font-size: 12px; padding: 10px 18px;
+    border-radius: var(--radius); transition: transform .3s; z-index: 300; pointer-events: none; white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ══════════ Firebase config overlay ══════════ -->
+<div id="config-overlay" class="overlay">
+  <div class="overlay-card">
+    <h2>connect to firebase</h2>
+    <p>Paste your Firebase config below to sync tasks across devices.</p>
+    <div class="config-steps">
+      <ol>
+        <li>Go to <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a> → open your project</li>
+        <li>Click <b>Project Settings</b> (gear icon) → <b>Your apps</b> → add a <b>Web app</b></li>
+        <li>Copy the <code>firebaseConfig</code> object and paste below</li>
+        <li>Sidebar → <b>Build → Realtime Database</b> → create in <b>test mode</b></li>
+      </ol>
+    </div>
+    <textarea class="overlay-textarea" id="config-input" placeholder="paste firebaseConfig here..."></textarea>
+    <div class="overlay-error" id="config-error"></div>
+    <div class="overlay-actions">
+      <button class="btn-primary" onclick="saveFirebaseConfig()">connect</button>
+      <button class="btn-secondary" onclick="skipFirebase()">use local storage</button>
+    </div>
+    <div class="overlay-note">Config stored only in this browser's localStorage.</div>
+  </div>
+</div>
+
+<!-- ══════════ Import overlay ══════════ -->
+<div id="import-overlay" class="overlay hidden">
+  <div class="overlay-card">
+    <h2>paste task list</h2>
+    <p>Paste your list — one task per line. Lines starting with <code>▢</code> or <code>-</code> or plain text are imported as tasks. Lines like "Weeks X" or notes are skipped automatically. Tasks containing <b>Test</b>, <b>Exam</b>, <b>Quiz</b>, or <b>Midterm</b> get their own exclusive day when re-balancing.</p>
+    <textarea class="overlay-textarea" id="import-input" placeholder="▢ 1.A Points, Lines, and Planes&#10;▢ 1.B Measuring Segments&#10;▢ Chapter 1 Test&#10;..." style="min-height:180px" oninput="previewImport()"></textarea>
+    <div class="import-preview" id="import-preview">
+      <div class="preview-count" id="preview-count"></div>
+      <div id="preview-rows"></div>
+    </div>
+    <div class="overlay-actions">
+      <button class="btn-primary" onclick="confirmImport()">import tasks</button>
+      <button class="btn-secondary" onclick="closeImport()">cancel</button>
+    </div>
+    <div class="overlay-note">Imported tasks are added to your existing list — duplicates by name are skipped.</div>
+  </div>
+</div>
+
+<!-- ══════════ App ══════════ -->
+<div class="app">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-header-row">
+        <h1>taskflow</h1>
+        <div id="sync-status" class="offline"><div class="sync-dot"></div><span>local</span></div>
+      </div>
+      <p>daily tasks, evenly spread</p>
+      <div class="sidebar-header-actions">
+        <button class="header-btn import-btn" onclick="openImport()">⊕ paste list</button>
+        <button class="header-btn" onclick="showConfigOverlay()">⚡ firebase</button>
+        <button class="header-btn" onclick="deleteAllTasks()" style="border-color:rgba(255,95,87,.3);color:var(--danger)" title="Delete all tasks">⊗ clear all</button>
+        <button class="header-btn" onclick="exportCSV()">↓ export</button>
+      </div>
+    </div>
+
+    <div class="add-task-area">
+      <div class="task-input-row">
+        <input class="task-input" id="task-name-input" placeholder="Add a task..." type="text">
+        <button class="add-btn" onclick="addTask()">add</button>
+      </div>
+      <div class="deadline-row">
+        <label>deadline</label>
+        <input class="date-input" id="task-deadline" type="date">
+      </div>
+    </div>
+
+    <div class="stats" id="stats-bar"></div>
+    <div class="task-list" id="task-list"></div>
+
+    <div class="rebalance-area">
+      <button class="rebalance-btn" id="rebalance-btn" onclick="rebalance()">
+        <span id="rebalance-icon">⟳</span>
+        <span id="rebalance-label">re-balance tasks</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="cal-header">
+      <div class="cal-nav" id="cal-nav">
+        <button class="cal-nav-btn" onclick="prevMonth()">←</button>
+        <span class="cal-month" id="cal-month-label"></span>
+        <button class="cal-nav-btn" onclick="nextMonth()">→</button>
+      </div>
+      <button class="cal-today-btn" onclick="goToday()">today</button>
+      <div style="display:flex;align-items:center;gap:8px;margin-left:8px">
+        <button class="end-date-btn" id="end-date-btn" onclick="toggleEndDatePicker()" title="Set the last day to finish all tasks">⊳ end date</button>
+        <input class="end-date-input" id="end-date-input" type="date" onchange="setEndDate(this.value)" title="Last day to complete all tasks">
+      </div>
+      <div class="view-toggle" style="margin-left:auto">
+        <button class="view-toggle-btn active" id="view-grid-btn" onclick="setView('grid')" title="Grid view">▦ grid</button>
+        <button class="view-toggle-btn" id="view-list-btn" onclick="setView('list')" title="List view">≡ list</button>
+      </div>
+    </div>
+    <div class="cal-grid" id="cal-grid-view">
+      <div class="cal-weekdays">
+        <div class="cal-weekday">Sun</div><div class="cal-weekday">Mon</div>
+        <div class="cal-weekday">Tue</div><div class="cal-weekday">Wed</div>
+        <div class="cal-weekday">Thu</div><div class="cal-weekday">Fri</div>
+        <div class="cal-weekday">Sat</div>
+      </div>
+      <div class="cal-days" id="cal-days"></div>
+    </div>
+    <div class="cal-list hidden" id="cal-list-view"></div>
+  </div>
+</div>
+
+<!-- ══════════ Day panel ══════════ -->
+<div class="day-panel" id="day-panel">
+  <div class="day-panel-header">
+    <h2 id="panel-date-label"></h2>
+    <button class="panel-close" onclick="closePanel()">×</button>
+  </div>
+  <div class="day-panel-tasks" id="panel-tasks"></div>
+  <div class="block-toggle">
+    <button class="block-btn" id="block-btn" onclick="toggleBlockDay()">⊘ block this day</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getDatabase, ref, onValue, set } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+
+const TODAY = new Date(); TODAY.setHours(0,0,0,0);
+const toKey = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const fromKey = k => { const [y,m,d] = k.split('-').map(Number); return new Date(y,m-1,d); };
+const fmtKey = k => fromKey(k).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+const monthLabel = (y,m) => new Date(y,m,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+const $ = id => document.getElementById(id);
+
+// Tasks with these words in the name get exclusive days
+const TEST_PATTERN = /\b(test|exam|quiz|midterm|final|project)\b/i;
+const isTestTask = name => TEST_PATTERN.test(name);
+const ASSIGN_PATTERN = /\bassignment\b/i;
+const isAssignTask = name => !isTestTask(name) && ASSIGN_PATTERN.test(name);
+
+// Lines to skip during import
+const SKIP_PATTERN = /^(week|weeks|note|chapter\s+\d+\s+is\s+optional|\s*$)/i;
+
+let state = { tasks: [], blocked: [], viewYear: TODAY.getFullYear(), viewMonth: TODAY.getMonth() };
+let selectedDay = null;
+let db = null;
+let usingFirebase = false;
+let syncTimeout = null;
+let pendingImport = [];
+
+// ── LocalStorage ──────────────────────────────────────────────────────────────
+function loadLocal() {
+  try {
+    const s = JSON.parse(localStorage.getItem('taskflow-v2'));
+    if (s) {
+      state.tasks = s.tasks || [];
+      state.tasks.forEach(t => {
+        if (t.isTest === undefined) t.isTest = isTestTask(t.name);
+        if (t.isAssign === undefined) t.isAssign = isAssignTask(t.name);
+      });
+      state.blocked = s.blocked || [];
+      state.viewYear = s.viewYear || TODAY.getFullYear();
+      state.viewMonth = s.viewMonth !== undefined ? s.viewMonth : TODAY.getMonth();
+      state.endDate = s.endDate || null;
+      state.calView = s.calView || 'grid';
+    }
+  } catch {}
+}
+function saveLocal() { try { localStorage.setItem('taskflow-v2', JSON.stringify(state)); } catch {} }
+
+// ── Firebase ──────────────────────────────────────────────────────────────────
+function parseFirebaseConfig(raw) {
+  raw = raw.trim().replace(/^.*?=\s*/, '').replace(/;?\s*$/, '');
+  raw = raw.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3');
+  raw = raw.replace(/,(\s*[}\]])/g, '$1');
+  return JSON.parse(raw);
+}
+
+function connectFirebase(config) {
+  const app = initializeApp(config);
+  db = getDatabase(app);
+  usingFirebase = true;
+  setSyncStatus('syncing');
+  onValue(ref(db, 'taskflow'), (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      state.tasks = data.tasks ? Object.values(data.tasks).sort((a,b)=>(a.order??999999)-(b.order??999999)) : [];
+      state.tasks.forEach(t => {
+        if (t.isTest === undefined) t.isTest = isTestTask(t.name);
+        if (t.isAssign === undefined) t.isAssign = isAssignTask(t.name);
+      });
+      state.blocked = data.blocked || [];
+    }
+    setSyncStatus('synced');
+    render();
+  }, () => setSyncStatus('error'));
+}
+
+function pushToFirebase() {
+  if (!db) return;
+  setSyncStatus('syncing');
+  const tasksObj = {};
+  state.tasks.forEach(t => { tasksObj[t.id] = t; });
+  set(ref(db, 'taskflow'), { tasks: tasksObj, blocked: state.blocked })
+    .then(() => setSyncStatus('synced'))
+    .catch(() => setSyncStatus('error'));
+}
+
+function schedulePush() {
+  saveLocal();
+  if (!usingFirebase) return;
+  clearTimeout(syncTimeout);
+  syncTimeout = setTimeout(pushToFirebase, 600);
+}
+
+function setSyncStatus(s) {
+  const el = $('sync-status'), dot = el.querySelector('.sync-dot');
+  el.className = s;
+  el.querySelector('span').textContent = {synced:'synced',syncing:'syncing…',offline:'local',error:'error'}[s]||s;
+  dot.className = 'sync-dot'+(s==='syncing'?' pulse':'');
+}
+
+// ── Config overlay ────────────────────────────────────────────────────────────
+window.saveFirebaseConfig = function() {
+  const raw = $('config-input').value.trim();
+  $('config-error').textContent = '';
+  if (!raw) { $('config-error').textContent = 'Please paste your Firebase config.'; return; }
+  try {
+    const config = parseFirebaseConfig(raw);
+    if (!config.databaseURL) throw new Error('Missing databaseURL — create a Realtime Database first.');
+    localStorage.setItem('taskflow-firebase-config', JSON.stringify(config));
+    $('config-overlay').classList.add('hidden');
+    connectFirebase(config);
+    showToast('connected to firebase ⚡');
+  } catch(e) { $('config-error').textContent = 'Could not parse config: ' + e.message; }
+};
+window.skipFirebase = function() {
+  $('config-overlay').classList.add('hidden');
+  setSyncStatus('offline'); render(); showToast('using local storage');
+};
+window.showConfigOverlay = function() {
+  const saved = localStorage.getItem('taskflow-firebase-config');
+  if (saved) $('config-input').value = JSON.stringify(JSON.parse(saved), null, 2);
+  $('config-overlay').classList.remove('hidden');
+};
+
+// ── Import overlay ────────────────────────────────────────────────────────────
+function parseImportText(raw) {
+  return raw.split('\n')
+    .map(line => line.trim())
+    .filter(line => {
+      if (!line) return false;
+      if (SKIP_PATTERN.test(line)) return false;
+      return true;
+    })
+    .map(line => {
+      // Strip leading ▢ □ - * • and whitespace
+      const name = line.replace(/^[▢□\-\*•]\s*/, '').trim();
+      return name;
+    })
+    .filter(name => name.length > 0);
+}
+
+window.openImport = function() {
+  $('import-input').value = '';
+  $('import-preview').classList.remove('visible');
+  $('import-overlay').classList.remove('hidden');
+  setTimeout(() => $('import-input').focus(), 50);
+};
+window.closeImport = function() { $('import-overlay').classList.add('hidden'); };
+
+window.previewImport = function() {
+  const names = parseImportText($('import-input').value);
+  const existingNames = new Set(state.tasks.map(t => t.name.toLowerCase()));
+  const rows = names.map(name => ({
+    name,
+    isTest: isTestTask(name),
+    isDupe: existingNames.has(name.toLowerCase())
+  }));
+  pendingImport = rows.filter(r => !r.isDupe);
+  const preview = $('import-preview');
+  if (!names.length) { preview.classList.remove('visible'); return; }
+  preview.classList.add('visible');
+  const dupes = rows.filter(r => r.isDupe).length;
+  $('preview-count').textContent =
+    `${pendingImport.length} tasks to import${dupes ? ` · ${dupes} duplicate${dupes>1?'s':''} skipped` : ''}`;
+  $('preview-rows').innerHTML = rows.slice(0, 20).map(r =>
+    `<div class="preview-row" style="${r.isDupe?'opacity:.4':''}">
+      <span class="preview-name">${r.name}</span>
+      <span class="preview-badge ${r.isTest?'test':r.isAssign?'assign':'task'}" style="${r.isAssign&&!r.isTest?'background:rgba(255,183,77,.15);color:var(--assign-color);border:1px solid rgba(255,183,77,.3)':''}">${r.isTest?'test day':r.isAssign?'assignment':'task'}</span>
+    </div>`
+  ).join('') + (rows.length > 20 ? `<div class="preview-row"><span class="preview-name" style="color:var(--muted)">…and ${rows.length-20} more</span></div>` : '');
+};
+
+window.confirmImport = function() {
+  if (!pendingImport.length) { closeImport(); return; }
+  const baseOrder = state.tasks.length;
+  pendingImport.forEach(({name, isTest}, i) => {
+    state.tasks.push({ id: 't'+(Date.now()+i)+Math.random().toString(36).slice(2), name, deadline: null, scheduledDate: null, done: false, isTest, isAssign: isAssignTask(name), order: baseOrder + i });
+  });
+  schedulePush(); render(); closeImport();
+  showToast(`imported ${pendingImport.length} tasks`);
+  pendingImport = [];
+};
+
+// ── Task actions ──────────────────────────────────────────────────────────────
+window.addTask = function() {
+  const name = $('task-name-input').value.trim();
+  const deadline = $('task-deadline').value;
+  if (!name) return;
+  state.tasks.push({ id: 't'+Date.now(), name, deadline: deadline||null, scheduledDate: null, done: false, isTest: isTestTask(name), isAssign: isAssignTask(name), order: state.tasks.length });
+  $('task-name-input').value = '';
+  schedulePush(); render(); showToast('task added');
+};
+window.deleteAllTasks = function() {
+  if (!confirm('Delete all tasks? This cannot be undone.')) return;
+  state.tasks = [];
+  schedulePush(); render();
+  showToast('all tasks deleted');
+};
+
+window.deleteTask = function(id) {
+  state.tasks = state.tasks.filter(t => t.id !== id);
+  schedulePush(); render(); if (selectedDay) renderPanel(selectedDay);
+};
+window.toggleDone = function(id) {
+  const t = state.tasks.find(t => t.id === id);
+  if (t) { t.done = !t.done; schedulePush(); render(); if (selectedDay) renderPanel(selectedDay); }
+};
+
+// ── Calendar nav ──────────────────────────────────────────────────────────────
+window.prevMonth = function() { state.viewMonth--; if(state.viewMonth<0){state.viewMonth=11;state.viewYear--;} saveLocal(); render(); };
+window.nextMonth = function() { state.viewMonth++; if(state.viewMonth>11){state.viewMonth=0;state.viewYear++;} saveLocal(); render(); };
+window.goToday = function() { state.viewYear=TODAY.getFullYear(); state.viewMonth=TODAY.getMonth(); saveLocal(); render(); };
+
+// ── Day panel ─────────────────────────────────────────────────────────────────
+window.openPanel = function(key) { selectedDay=key; $('day-panel').classList.add('open'); renderPanel(key); render(); };
+window.closePanel = function() { $('day-panel').classList.remove('open'); selectedDay=null; render(); };
+window.listToggleBlock = function(key) {
+  const idx = state.blocked.indexOf(key);
+  if (idx >= 0) state.blocked.splice(idx, 1);
+  else { state.blocked.push(key); state.tasks.forEach(t => { if(t.scheduledDate===key) t.scheduledDate=null; }); }
+  schedulePush(); render();
+};
+
+window.toggleBlockDay = function() {
+  if (!selectedDay) return;
+  const idx = state.blocked.indexOf(selectedDay);
+  if (idx>=0) state.blocked.splice(idx,1);
+  else { state.blocked.push(selectedDay); state.tasks.forEach(t => { if(t.scheduledDate===selectedDay) t.scheduledDate=null; }); }
+  schedulePush(); render(); renderPanel(selectedDay);
+};
+
+function renderPanel(key) {
+  $('panel-date-label').textContent = fmtKey(key);
+  const tasks = state.tasks.filter(t => t.scheduledDate===key);
+  const isBlocked = state.blocked.includes(key);
+  const btn = $('block-btn');
+  btn.textContent = isBlocked ? '✓ unblock this day' : '⊘ block this day';
+  btn.classList.toggle('active', isBlocked);
+  const todayKey = toKey(TODAY);
+  const container = $('panel-tasks');
+  if (!tasks.length) { container.innerHTML = '<div class="empty-msg">no tasks scheduled</div>'; return; }
+  container.innerHTML = tasks.map(t => {
+    const overdue = t.deadline && todayKey > t.deadline && !t.done;
+    return `<div class="panel-task-item${t.done?' done':''}" onclick="toggleDone('${t.id}')">
+      <div class="task-check"><div class="task-check-inner"></div></div>
+      <div class="task-info">
+        <div class="task-name">${t.name}</div>
+        ${t.isTest ? '<div class="task-meta"><span class="test-badge">test day</span></div>' : ''}
+        ${t.deadline ? `<div class="task-date${overdue?' overdue':''}">due ${fmtKey(t.deadline)}</div>` : ''}
+      </div>
+      <button class="task-del" onclick="event.stopPropagation();deleteTask('${t.id}')">×</button>
+    </div>`;
+  }).join('');
+}
+
+// ── End date ─────────────────────────────────────────────────────────────────
+window.toggleEndDatePicker = function() {
+  const input = $('end-date-input'), btn = $('end-date-btn');
+  const visible = input.classList.toggle('visible');
+  btn.classList.toggle('active', !!state.endDate);
+  if (visible && state.endDate) input.value = state.endDate;
+  if (visible) setTimeout(() => input.showPicker && input.showPicker(), 50);
+};
+window.setEndDate = function(val) {
+  state.endDate = val || null;
+  $('end-date-btn').classList.toggle('active', !!val);
+  $('end-date-btn').title = val ? `End date: ${fmtKey(val)} — click to change` : 'Set the last day to finish all tasks';
+  saveLocal(); render();
+};
+
+// ── Rebalance ─────────────────────────────────────────────────────────────────
+window.rebalance = async function() {
+  const btn=$('rebalance-btn'), icon=$('rebalance-icon'), label=$('rebalance-label');
+  btn.disabled=true; icon.classList.add('spin'); label.textContent='balancing…';
+  await new Promise(r => setTimeout(r, 350));
+
+  const pending = state.tasks.filter(t => !t.done);
+  pending.forEach(t => t.scheduledDate = null);
+  if (!pending.length) {
+    showToast('no pending tasks to schedule');
+    btn.disabled=false; icon.classList.remove('spin'); label.textContent='re-balance tasks'; return;
+  }
+
+  // The global end date is the fallback deadline for tasks with no deadline
+  const globalEnd = state.endDate
+    ? fromKey(state.endDate)
+    : new Date(TODAY.getTime() + 90*86400000);
+
+  // Sort strictly by `order` index to preserve sequence (import order)
+  // Within same order, test/project tasks go last (they need exclusive days at end of section)
+  pending.sort((a, b) => {
+    const ao = a.order ?? 999999, bo = b.order ?? 999999;
+    if (ao !== bo) return ao - bo;
+    return (a.isTest ? 1 : 0) - (b.isTest ? 1 : 0);
+  });
+
+  // Two-pass algorithm:
+  // Pass 1: figure out the full available day pool and total capacity
+  // Pass 2: assign days in order, one slot per task, advancing a pointer forward
+  // Test/project tasks consume an exclusive day (nothing else on that day)
+
+  const allDays = getAvailableDays(TODAY, globalEnd);
+  if (!allDays.length) {
+    showToast('no available days — check end date or unblock some days');
+    btn.disabled=false; icon.classList.remove('spin'); label.textContent='re-balance tasks'; return;
+  }
+
+  // Build a schedule slot list: evenly spread `pending.length` slots across allDays
+  // Test tasks need exclusive slots; regular tasks share slots (even spread)
+  const testCount = pending.filter(t => t.isTest).length;
+  const regularCount = pending.length - testCount;
+
+  // We need at least testCount days for tests + enough days for regular tasks
+  // Strategy: assign one day per test (exclusive), distribute regular tasks evenly across remaining days
+  const testDaySet = new Set();
+  const loadMap = {}; // day key -> number of regular tasks
+
+  // We'll do a sequential pointer pass to ensure ORDER is preserved
+  // dayPointer advances forward; test tasks skip to their own fresh day
+  let dayPointer = 0;
+
+  // Pre-calculate tasks per day for even spread of regular tasks
+  const regularDays = allDays.length - testCount;
+  const tasksPerDay = regularDays > 0 ? Math.ceil(regularCount / Math.max(regularDays, 1)) : 1;
+
+  pending.forEach(t => {
+    // Respect per-task deadline ceiling
+    const ceiling = t.deadline ? toKey(fromKey(t.deadline)) : null;
+
+    if (t.isTest) {
+      // Advance pointer to a day that: (a) is not already used by a regular task at capacity,
+      // (b) is not already a test day, (c) is within deadline if set
+      // Prefer the next clean day after all currently scheduled tasks for this section
+      let chosen = null;
+      for (let i = dayPointer; i < allDays.length; i++) {
+        const k = allDays[i];
+        if (ceiling && k > ceiling) break;
+        if (!testDaySet.has(k) && !(loadMap[k] > 0)) {
+          chosen = k; dayPointer = i + 1; break;
+        }
+      }
+      // Fallback: next non-test day regardless of load
+      if (!chosen) {
+        for (let i = dayPointer; i < allDays.length; i++) {
+          const k = allDays[i];
+          if (ceiling && k > ceiling) break;
+          if (!testDaySet.has(k)) { chosen = k; dayPointer = i + 1; break; }
+        }
+      }
+      if (!chosen) chosen = allDays[Math.min(dayPointer, allDays.length-1)];
+      t.scheduledDate = chosen;
+      testDaySet.add(chosen);
+    } else {
+      // Regular task: pick the earliest available day (from pointer) that isn't test-locked
+      // and hasn't hit tasksPerDay cap yet — this preserves forward sequence
+      let chosen = null;
+      for (let i = dayPointer; i < allDays.length; i++) {
+        const k = allDays[i];
+        if (ceiling && k > ceiling) break;
+        if (!testDaySet.has(k) && (loadMap[k]||0) < tasksPerDay) {
+          chosen = k; break;
+        }
+      }
+      // Fallback: least-loaded non-test day from pointer onward
+      if (!chosen) {
+        const pool = allDays.slice(dayPointer).filter(k => !testDaySet.has(k) && (!ceiling || k <= ceiling));
+        if (pool.length) {
+          chosen = pool.reduce((best, k) => (loadMap[k]||0) < (loadMap[best]||0) ? k : best, pool[0]);
+        }
+      }
+      if (!chosen) chosen = allDays[Math.min(dayPointer, allDays.length-1)];
+      t.scheduledDate = chosen;
+      loadMap[chosen] = (loadMap[chosen]||0) + 1;
+      // Only advance pointer when current day is full
+      if ((loadMap[chosen]||0) >= tasksPerDay) {
+        while (dayPointer < allDays.length && (
+          testDaySet.has(allDays[dayPointer]) ||
+          (loadMap[allDays[dayPointer]]||0) >= tasksPerDay
+        )) dayPointer++;
+      }
+    }
+  });
+
+  schedulePush();
+  btn.disabled=false; icon.classList.remove('spin'); label.textContent='re-balance tasks';
+  const dayCount = new Set(pending.map(t=>t.scheduledDate).filter(Boolean)).size;
+  showToast(`${pending.length} tasks balanced across ${dayCount} days`);
+  render(); if (selectedDay) renderPanel(selectedDay);
+};
+
+function getAvailableDays(from, to) {
+  const days=[]; let d=new Date(from);
+  while(d<=to){const k=toKey(d);if(!state.blocked.includes(k))days.push(k);d.setDate(d.getDate()+1);}
+  return days;
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+window.exportCSV = function() {
+  const rows=[['name','deadline','scheduledDate','done','isTest']];
+  state.tasks.forEach(t=>rows.push([`"${t.name.replace(/"/g,'""')}"`,t.deadline||'',t.scheduledDate||'',t.done,t.isTest||false]));
+  const csv=rows.map(r=>r.join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='taskflow-export.csv'; a.click();
+  showToast('exported to CSV');
+};
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render() { renderStats(); renderTaskList(); if(state.calView==='list') renderListView(); else renderCalendar(); }
+
+function renderStats() {
+  const total=state.tasks.length, done=state.tasks.filter(t=>t.done).length;
+  const pct=total?Math.round(done/total*100):0;
+  $('stats-bar').innerHTML=`
+    <div class="stat"><div class="stat-val">${total-done}</div><div class="stat-lbl">pending</div></div>
+    <div class="stat"><div class="stat-val">${done}</div><div class="stat-lbl">done</div></div>
+    <div class="stat"><div class="stat-val">${pct}%</div><div class="stat-lbl">progress</div></div>`;
+}
+
+function renderTaskList() {
+  const todayKey=toKey(TODAY);
+  const byOrder = (a,b) => (a.order??999999)-(b.order??999999);
+  const scheduled=state.tasks.filter(t=>t.scheduledDate&&!t.done).sort((a,b)=>{ const d=a.scheduledDate.localeCompare(b.scheduledDate); return d!==0?d:byOrder(a,b); });
+  const unscheduled=state.tasks.filter(t=>!t.scheduledDate&&!t.done).sort(byOrder);
+  const done=state.tasks.filter(t=>t.done).sort(byOrder);
+  let html='';
+  const taskRow = (t, extraCls='') => {
+    const overdue=t.deadline&&todayKey>t.deadline;
+    return `<div class="task-item${extraCls}${overdue?' overdue':''}" onclick="toggleDone('${t.id}')">
+      <div class="task-check"><div class="task-check-inner"></div></div>
+      <div class="task-info">
+        <div class="task-name">${t.name}</div>
+        <div class="task-meta">
+          ${t.scheduledDate?`<span class="task-date">${fmtKey(t.scheduledDate)}</span>`:''}
+          ${t.deadline?`<span class="task-date${overdue?' overdue':''}">· due ${fmtKey(t.deadline)}</span>`:''}
+          ${!t.scheduledDate&&!t.done?'<span class="unscheduled-badge">needs scheduling</span>':''}
+          ${t.isTest?'<span class="test-badge">test day</span>':''}${t.isAssign?'<span class="assign-badge">assignment</span>':''}
+        </div>
+      </div>
+      <button class="task-del" onclick="event.stopPropagation();deleteTask('${t.id}')">×</button>
+    </div>`;
+  };
+  if (scheduled.length) html+=`<div class="task-group-label">scheduled</div>`+scheduled.map(t=>taskRow(t)).join('');
+  if (unscheduled.length) html+=`<div class="task-group-label">unscheduled</div>`+unscheduled.map(t=>taskRow(t)).join('');
+  if (done.length) html+=`<div class="task-group-label">completed</div>`+done.map(t=>`<div class="task-item done" onclick="toggleDone('${t.id}')">
+    <div class="task-check"><div class="task-check-inner"></div></div>
+    <div class="task-info"><div class="task-name">${t.name}</div></div>
+    <button class="task-del" onclick="event.stopPropagation();deleteTask('${t.id}')">×</button>
+  </div>`).join('');
+  $('task-list').innerHTML=html||'<div class="empty-msg">no tasks yet — add one or paste a list</div>';
+}
+
+// ── View toggle ───────────────────────────────────────────────────────────────
+window.setView = function(v) {
+  state.calView = v;
+  saveLocal();
+  $('cal-grid-view').classList.toggle('hidden', v === 'list');
+  $('cal-list-view').classList.toggle('hidden', v === 'grid');
+  $('cal-nav').style.display = v === 'list' ? 'none' : '';
+  $('view-grid-btn').classList.toggle('active', v === 'grid');
+  $('view-list-btn').classList.toggle('active', v === 'list');
+  if (v === 'list') renderListView();
+  else renderCalendar();
+};
+
+function renderListView() {
+  const todayKey = toKey(TODAY);
+  // Build task map
+  const taskMap = {};
+  state.tasks.forEach(t => {
+    if (t.scheduledDate) {
+      if (!taskMap[t.scheduledDate]) taskMap[t.scheduledDate] = [];
+      taskMap[t.scheduledDate].push(t);
+    }
+  });
+
+  // Determine range: today to end date or last scheduled task + 14 days
+  const scheduledKeys = Object.keys(taskMap).sort();
+  const lastKey = scheduledKeys.length ? scheduledKeys[scheduledKeys.length-1] : todayKey;
+  const endKey = state.endDate && state.endDate > lastKey ? state.endDate : lastKey;
+  const startDate = new Date(TODAY);
+  const endDate = fromKey(endKey);
+  // Add a few extra days after end
+  endDate.setDate(endDate.getDate() + 3);
+
+  // Group days by month
+  let html = '';
+  let currentMonth = '';
+  let d = new Date(startDate);
+  const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  while (d <= endDate) {
+    const key = toKey(d);
+    const tasks = taskMap[key] || [];
+    const isToday = key === todayKey;
+    const isBlocked = state.blocked.includes(key);
+    const isEndDay = state.endDate && key === state.endDate;
+    const hasTest = tasks.some(t => t.isTest);
+
+    const monthLabel = `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+    if (monthLabel !== currentMonth) {
+      currentMonth = monthLabel;
+      html += `<div class="cal-list-month">${monthLabel}</div>`;
+    }
+
+    // Skip empty days that aren't today, end date, or blocked
+    if (!tasks.length && !isToday && !isEndDay && !isBlocked) {
+      d.setDate(d.getDate() + 1); continue;
+    }
+
+    const hasAssignDay = tasks.some(t => t.isAssign && !t.isTest);
+    let dayCls = 'cal-list-day';
+    if (isToday) dayCls += ' today';
+    if (isBlocked) dayCls += ' blocked-day';
+    if (isEndDay) dayCls += ' end-day';
+
+    const chipsHtml = tasks.length
+      ? tasks.map(t => {
+          const overdue = t.deadline && todayKey > t.deadline && !t.done;
+          const chipCls = t.isTest ? ' is-test' : t.isAssign ? ' is-assign' : '';
+          return `<div class="cal-list-chip${chipCls}${t.done?' done':''}" onclick="event.stopPropagation();toggleDone('${t.id}')">
+            <span class="cal-list-chip-name">${t.name}</span>
+            ${t.isTest ? '<span style="font-size:9px;opacity:.7">★</span>' : ''}
+            ${t.isAssign ? '<span style="font-size:9px;opacity:.7">✎</span>' : ''}
+            ${overdue ? '<span style="font-size:9px;color:var(--danger)">!</span>' : ''}
+          </div>`;
+        }).join('')
+      : `<div class="cal-list-empty">${isBlocked ? 'blocked' : isEndDay ? '⊳ end date' : isToday ? 'today — no tasks' : 'no tasks'}</div>`;
+
+    const icons = (isEndDay ? '<span class="end-day-icon" style="font-size:10px">⊳</span>' : '') +
+                  (hasTest ? '<span class="cal-test-icon" style="font-size:10px">★</span>' : '') +
+                  (hasAssignDay ? '<span class="cal-assign-icon" style="font-size:10px">✎</span>' : '');
+
+    const blockLabel = isBlocked ? '✓ unblock' : '⊘ block';
+    html += `<div class="${dayCls}" onclick="openPanel('${key}')">
+      <div class="cal-list-date">
+        <div class="cal-list-dow">${DAYS[d.getDay()]}</div>
+        <div class="cal-list-dom">${d.getDate()}</div>
+      </div>
+      <div class="cal-list-tasks">${chipsHtml}</div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+        ${icons ? `<div class="cal-list-day-icons">${icons}</div>` : ''}
+        <button class="cal-list-block-btn" onclick="event.stopPropagation();listToggleBlock('${key}')">${blockLabel}</button>
+      </div>
+    </div>`;
+
+    d.setDate(d.getDate() + 1);
+  }
+
+  $('cal-list-view').innerHTML = html || '<div style="padding:24px;color:var(--muted);font-size:12px">no scheduled tasks yet</div>';
+
+  // Scroll to today
+  requestAnimationFrame(() => {
+    const todayEl = $('cal-list-view').querySelector('.cal-list-day.today');
+    if (todayEl) todayEl.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  });
+}
+
+function renderCalendar() {
+  $('cal-month-label').textContent=monthLabel(state.viewYear,state.viewMonth);
+  const first=new Date(state.viewYear,state.viewMonth,1);
+  const last=new Date(state.viewYear,state.viewMonth+1,0);
+  const todayKey=toKey(TODAY);
+  const taskMap={};
+  state.tasks.forEach(t=>{if(t.scheduledDate){if(!taskMap[t.scheduledDate])taskMap[t.scheduledDate]=[];taskMap[t.scheduledDate].push(t);}});
+  const maxLoad=Math.max(1,...Object.values(taskMap).map(a=>a.length));
+  let days=[];
+  for(let i=0;i<first.getDay();i++){const d=new Date(first);d.setDate(d.getDate()-(first.getDay()-i));days.push({date:d,other:true});}
+  for(let i=1;i<=last.getDate();i++)days.push({date:new Date(state.viewYear,state.viewMonth,i),other:false});
+  const rem=7-(days.length%7);if(rem<7)for(let i=1;i<=rem;i++){const d=new Date(last);d.setDate(d.getDate()+i);days.push({date:d,other:true});}
+
+  $('cal-days').innerHTML=days.map(({date,other})=>{
+    const key=toKey(date);
+    const isToday=key===todayKey,isBlocked=state.blocked.includes(key),isSel=key===selectedDay,isEndDay=!other&&state.endDate&&key===state.endDate;
+    const tasks=taskMap[key]||[];
+    const hasTest=tasks.some(t=>t.isTest);
+    const load=tasks.length/maxLoad;
+    const loadColor=load>.7?'var(--danger)':load>.4?'var(--warn)':'var(--accent)';
+    const hasAssign=tasks.some(t=>t.isAssign&&!t.isTest);
+    let cls='cal-day'+(other?' other-month':'')+(isToday?' today':'')+(isBlocked?' blocked':'')+(isSel?' selected':'')+(hasTest&&!isBlocked?' test-day':'')+(hasAssign&&!hasTest&&!isBlocked?' assign-day':'')+(isEndDay?' end-day':'');
+    const visible=tasks.slice(0,3),more=tasks.length-3;
+    return `<div class="${cls}" ${other?'':(`onclick="openPanel('${key}')"`)}>
+      <div class="cal-day-num">${date.getDate()}${isBlocked?'<span class="cal-block-icon">✕</span>':''}${hasTest&&!isBlocked?'<span class="cal-test-icon">★</span>':''}${isEndDay?'<span class="end-day-icon">⊳</span>':''}</div>
+      <div class="cal-day-tasks">
+        ${visible.map(t=>{const ov=t.deadline&&todayKey>t.deadline&&!t.done;return`<div class="cal-task-chip${t.isTest?' is-test':t.isAssign?' is-assign':''}${t.done?' done':''}${ov?' overdue':''}">${t.name}</div>`;}).join('')}
+        ${more>0?`<div class="cal-more">+${more} more</div>`:''}
+      </div>
+      ${tasks.length?`<div class="load-bar"><div class="load-fill" style="width:${Math.round(load*100)}%;background:${hasTest?'var(--test-color)':loadColor}"></div></div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function showToast(msg) {
+  const el=$('toast');el.textContent=msg;el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),2500);
+}
+window.showToast=showToast;
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+$('task-name-input').addEventListener('keydown',e=>{if(e.key==='Enter')window.addTask();});
+$('task-deadline').value=toKey(new Date(TODAY.getTime()+7*86400000));
+
+loadLocal();
+
+const BUILTIN_CONFIG = {
+  apiKey: "AIzaSyDSDBahcfMejht7KzkJ_TOFv0QXl2aZD1o",
+  authDomain: "taskflow-9286d.firebaseapp.com",
+  databaseURL: "https://taskflow-9286d-default-rtdb.firebaseio.com",
+  projectId: "taskflow-9286d",
+  storageBucket: "taskflow-9286d.firebasestorage.app",
+  messagingSenderId: "705223687902",
+  appId: "1:705223687902:web:6fa3ec65684ad5ae148c4f"
+};
+
+$('config-overlay').classList.add('hidden');
+$('config-input').value = JSON.stringify(BUILTIN_CONFIG, null, 2);
+localStorage.setItem('taskflow-firebase-config', JSON.stringify(BUILTIN_CONFIG));
+connectFirebase(BUILTIN_CONFIG);
+render();
+// Restore end date UI state
+if (state.endDate) {
+  $('end-date-btn').classList.add('active');
+  $('end-date-input').value = state.endDate;
+  $('end-date-btn').title = `End date: ${fmtKey(state.endDate)} — click to change`;
+}
+// Restore view mode
+if (state.calView === 'list') setView('list');
+</script>
+</body>
+</html>
